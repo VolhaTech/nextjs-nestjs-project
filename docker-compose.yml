@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: database
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-d", "db_prod"]
+      interval: 5s
+      retries: 3
+      start_period: 3s
+      timeout: 3s
+    networks:
+      - hipaa
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - hipaa
+
+  nestjs:
+    build:
+      context: ./nestjs-server
+      dockerfile: Dockerfile
+    container_name: nestjs
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://user:password@postgres:5432/database?schema=public
+      REDIS_URL: redis://redis:6379
+      AWS_KMS_KEY_ID: your-kms-key-id
+    networks:
+      - hipaa
+
+  nextjs:
+    build:
+      context: ./nextjs-client
+      dockerfile: Dockerfile
+    container_name: nextjs
+    ports:
+      - "3001:3000"
+    depends_on:
+      - nestjs
+    environment:
+      NEXT_PUBLIC_API_URL: http://nestjs:3000
+    networks:
+      - hipaa
+  
+networks:
+  hipaa:
+    driver: bridge
